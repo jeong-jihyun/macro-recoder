@@ -1,0 +1,3 @@
+macros/
+__pycache__/
+*.pyc

@@ -10,7 +10,7 @@ PC 매크로 녹화/재생 스크립트 (스냅샷 기능 포함)
     pip install pynput pillow
 
 [사용법]
-    python macro_recorder.py
+    python macro_recoder.py
 
     F9  : 녹화 시작 / 정지 (토글). 정지하면 저장할 이름을 콘솔에 입력받습니다.
     F7  : 녹화 중에만 동작 — 지금 이 순간 화면을 스크린샷으로 저장 (스냅샷)
@@ -24,6 +24,7 @@ PC 매크로 녹화/재생 스크립트 (스냅샷 기능 포함)
 
 import json
 import os
+import shutil
 import time
 import threading
 from datetime import datetime
@@ -38,6 +39,8 @@ except ImportError:
     ImageGrab = None  # pillow가 없으면 스냅샷 기능만 비활성화
 
 MACRO_DIR = "macros"
+# 녹화 중 스냅샷을 임시로 모아 두는 폴더 (저장할 때 <이름>_snapshots 로 옮김)
+TEMP_SNAP_DIR = os.path.join(MACRO_DIR, "_recording_snapshots")
 os.makedirs(MACRO_DIR, exist_ok=True)
 
 mouse_ctrl = MouseController()
@@ -141,6 +144,10 @@ def toggle_recording():
     if not recording:
         events = []
         snapshot_count = 0
+        # 이름은 녹화가 끝나야 알 수 있으므로, 스냅샷은 먼저 임시 폴더에 저장한다.
+        shutil.rmtree(TEMP_SNAP_DIR, ignore_errors=True)
+        os.makedirs(TEMP_SNAP_DIR, exist_ok=True)
+        current_snap_dir = TEMP_SNAP_DIR
         start_time = time.time()
         recording = True
         print("[녹화 시작] F7=스냅샷, F9=녹화 정지")
@@ -150,8 +157,17 @@ def toggle_recording():
         if not name:
             name = "last"
 
-        current_snap_dir = os.path.join(MACRO_DIR, f"{name}_snapshots")
-        os.makedirs(current_snap_dir, exist_ok=True)
+        # 임시 폴더의 스냅샷을 <이름>_snapshots 로 옮기고, 이벤트에 적힌 파일 경로도 맞춘다.
+        final_snap_dir = os.path.join(MACRO_DIR, f"{name}_snapshots")
+        shutil.rmtree(final_snap_dir, ignore_errors=True)
+        if os.path.isdir(TEMP_SNAP_DIR):
+            shutil.move(TEMP_SNAP_DIR, final_snap_dir)
+        else:
+            os.makedirs(final_snap_dir, exist_ok=True)
+        for ev in events:
+            if ev["type"] == "snapshot":
+                ev["file"] = os.path.join(final_snap_dir, os.path.basename(ev["file"]))
+        current_snap_dir = final_snap_dir
 
         filepath = os.path.join(MACRO_DIR, f"{name}.json")
         with open(filepath, "w", encoding="utf-8") as f:
